@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,20 +13,30 @@ st.set_page_config(layout="wide")
 latest_log_file, log_file_paths = get_newest_file_path("data")
 default_ix = log_file_paths.index(latest_log_file)
 
+if 'options' not in st.session_state:
+    st.session_state.options = log_file_paths
+
+if 'file_upload_path' not in st.session_state:
+    st.session_state.file_upload_path = None
+    st.write(st.session_state.file_upload_path)
+
+def update_options():
+    # move the selected option to the front of the list if it is not already
+    if st.session_state.file_upload_path not in st.session_state.options:
+        st.session_state.options.insert(0, st.session_state.file_upload_path)
+        st.write(st.session_state.options)
+
 with st.sidebar:
     selected_log_file = st.selectbox(
        label="Log file:",
        label_visibility="visible",
-       options=log_file_paths,
+       options=st.session_state.options,
        index=None,  # default_ix
        placeholder="Select a log file:",
+       key="selected_option",
+       on_change=update_options,
     )
-# st.write('You selected:', selected_log_file)
 
-# file_upload = st.file_uploader("Choose a log-file")
-
-#if file_upload:
-#    log_df = pd.read_csv(file_upload)
 if selected_log_file:
     log_df = pd.read_csv(selected_log_file)
     log_df.columns = log_df.columns.str.lower()
@@ -38,6 +50,12 @@ if selected_log_file:
             options=parameter_options,
             placeholder="Select parameters to plot",
         )
+        file_upload = st.file_uploader("Upload a log-file", on_change=update_options)
+        if file_upload is not None:
+            st.session_state.file_upload_path = os.path.join("data", file_upload.name)
+            with open(st.session_state.file_upload_path, "wb") as f:
+                f.write(file_upload.getbuffer())
+            st.success("Saved File")
 
     fig = px.line(log_df_long, x="time", y="value", color="parameter")
     fig.update_layout(
@@ -48,7 +66,7 @@ if selected_log_file:
     fig.update_xaxes(title=None, showticklabels=False)
     fig.update_traces(visible="legendonly", selector=lambda t: not t.name in selected_parameters)
     for trace in fig['data']:
-        if (not trace['name'] in selected_parameters):
+        if not trace['name'] in selected_parameters:
             trace['showlegend'] = False
     st.plotly_chart(fig, use_container_width=True)
 
